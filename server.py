@@ -7,13 +7,12 @@ topics = {
     "NEWS": []
 }
 
-# initialize the server
+# dictionary to map client names to connections
+client_connections = {}
+
+# initialize the server, bind it to port 5555, and start listening for connection requests
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-# bind the socket to localhost IP address on port 5555
 server.bind(("localhost", 5555))
-
-# start listening for connection requests on the server
 server.listen()
 print("[STARTING] Server is listening on localhost:5555")
 
@@ -21,6 +20,7 @@ print("[STARTING] Server is listening on localhost:5555")
 def handle_client(conn, addr):
     print(f"[HANDLING CLIENT] {addr}")
     connected = True
+    client_name = None
 
     while connected:
         try:
@@ -31,8 +31,19 @@ def handle_client(conn, addr):
                 # extract the type and details of the message
                 parts = message.split(',')
 
-                if len(parts) == 3 and parts[1].strip() == "SUB":
-                    handle_sub(parts, conn)
+                # Handle CONNECT
+                if len(parts) == 2 and parts[1].strip() == "CONN":
+                    client_name = parts[0].strip()
+                    handle_connect(client_name, conn)
+
+                # Handle SUBSCRIBE
+                elif len(parts) == 3 and parts[1].strip() == "SUB":
+                    handle_sub(parts[0].strip(), parts[2].strip(), conn)
+
+                # Handle DISCONNECT
+                elif message.strip() == "DISC":
+                    handle_disconnect(client_name, conn)
+                    connected = False
                 
             else:
                 connected = False
@@ -42,21 +53,44 @@ def handle_client(conn, addr):
     conn.close()
 
 # handle message format <NAME, SUB, SUBJECT>
-def handle_sub(parts, conn):
-    # extract details
-    client_name = parts[0].strip()
-    subject = parts[2].strip()
+def handle_sub(client_name, subject, conn):
+    # make sure client is connected (named)
+    if client_connections[client_name] is None:
+        conn.send(f"<ERROR: Subscription Failed - Client Not Connected>".encode('utf-8'))
+        print(f"[ERROR] {client_name} tried to subscribe before logging in")
 
     # add the client to the subscriber list if it exists
-    if subject in topics:
-        if conn not in topics[subject]:
-            topics[subject].append(conn)
+    elif subject in topics:
+        if client_name not in topics[subject]:
+            topics[subject].append(client_name)
         conn.send(f"<SUB_ACK: Subscribed to {subject}>".encode('utf-8'))
         print(f"[SUBSCRIPTION] {client_name} subscribed to {subject}")
     else:
         conn.send(f"<ERROR: Subscription Failed - Subject {subject} Not Found>".encode('utf-8'))
         print(f"[ERROR] {client_name} tried to subscribe to non-existent subject: {subject}")
             
+# handle message format <NAME, CONN>
+def handle_connect(client_name, conn):
+    # associate the connection with the name
+    client_connections[client_name] = conn
+
+    # respond to the client
+    print(f"[CONNECT] {client_name} connected.")
+    conn.send("<CONN_ACK>".encode('utf-8'))
+
+# handle message format <DISC>
+def handle_disconnect(client_name, conn):
+    # respond to client
+    conn.send("<DISC_ACK>".encode('utf-8'))
+
+    # wipe the connection from the dictionery
+    if client_name == None:
+        print("[DISCONNECT] Client disconnected.")
+    else:
+        client_connections[client_name] = None
+        print("[DISCONNECT] {client_name} disconnected.")
+
+
 
 # repeatedly create new threads for new connections
 while True:
