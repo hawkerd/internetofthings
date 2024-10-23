@@ -12,6 +12,7 @@ client_connections = {}
 
 # initialize the server, bind it to port 5555, and start listening for connection requests
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(("localhost", 5555))
 server.listen()
 print("[STARTING] Server is listening on localhost:5555")
@@ -23,7 +24,7 @@ def handle_client(conn, addr):
 
     while connected:
         try:
-            message = conn.recv(1024).decode('utf-8')
+            message = conn.recv(1024).decode()
             if message:
                 print(f"[RECEIVED] {message} from {addr}")
 
@@ -59,13 +60,13 @@ def handle_client(conn, addr):
 def handle_publish(client_name, subject, msg, conn):
     # make sure client is connected
     if client_connections.get(client_name) is None:
-        conn.send(f"ERROR: Subscription Failed - Client Not Connected\n".encode('utf-8'))
+        conn.send(f"ERROR: Subscription Failed - Client Not Connected\n".encode())
         print(f"[ERROR] {client_name} tried to subscribe before logging in")
         return
 
     # make sure the subject exists
     if subject not in topics:
-        conn.send(f"ERROR: Publish Failed - Subject {subject} Not Found\n".encode('utf-8'))
+        conn.send(f"ERROR: Publish Failed - Subject {subject} Not Found\n".encode())
         print(f"[ERROR] {client_name} tried to publish to non-existent subject: {subject}")
         return
     
@@ -73,15 +74,15 @@ def handle_publish(client_name, subject, msg, conn):
     for subscriber in topics[subject]:
         subscriber_conn = client_connections[subscriber]
         if subscriber_conn is not None:
-            subscriber_conn.send(f"{subject} - {client_name}: {msg}\n".encode('utf-8'))
-    
+            subscriber_conn.send(f"{subject} - {client_name}: {msg}\n".encode())
+    conn.send(f"PUBLISH: Published to {subject}\n".encode())
     print(f"[PUBLISH] {client_name} published to {subject}: {msg}")
 
 # handle message format <NAME, SUB, SUBJECT>
 def handle_sub(client_name, subject, conn):
     # make sure client is connected
     if client_connections.get(client_name) is None:
-        conn.send(f"ERROR: Subscribe Failed - Client Not Connected\n".encode('utf-8'))
+        conn.send(f"ERROR: Subscribe Failed - Client Not Connected\n".encode())
         print(f"[ERROR] {client_name} tried to subscrtibe before logging in")
         return
 
@@ -89,10 +90,10 @@ def handle_sub(client_name, subject, conn):
     if subject in topics:
         if client_name not in topics[subject]:
             topics[subject].append(client_name)
-        conn.send(f"SUB_ACK: Subscribed to {subject}\n".encode('utf-8'))
+        conn.send(f"SUB_ACK: Subscribed to {subject}\n".encode())
         print(f"[SUBSCRIPTION] {client_name} subscribed to {subject}")
     else:
-        conn.send(f"ERROR: Subscription Failed - Subject {subject} Not Found\n".encode('utf-8'))
+        conn.send(f"ERROR: Subscription Failed - Subject {subject} Not Found\n".encode())
         print(f"[ERROR] {client_name} tried to subscribe to non-existent subject: {subject}")
             
 # handle message format <NAME, CONN>
@@ -102,12 +103,12 @@ def handle_connect(client_name, conn):
 
     # respond to the client
     print(f"[CONNECT] {client_name} connected.")
-    conn.send("CONN_ACK\n".encode('utf-8'))
+    conn.send("CONN_ACK\n".encode())
 
 # handle message format <DISC>
 def handle_disconnect(client_name, conn):
     # respond to client
-    conn.send("DISC_ACK\n".encode('utf-8'))
+    conn.send("DISC_ACK\n".encode())
 
     # wipe the connection from the dictionery
     if client_name == None:
@@ -121,7 +122,7 @@ def handle_disconnect(client_name, conn):
 # repeatedly create new threads for new connections
 try:
     while True:
-        # accept a new connection
+        # accept a new connection-
         conn, addr = server.accept()
         print(f"[NEW CONNECTION] {addr} connected.")
 
@@ -132,3 +133,5 @@ try:
 except KeyboardInterrupt:
     print("\n[SHUTTING DOWN] Server is shutting down.")
     server.close()
+    quit()
+    exit()
