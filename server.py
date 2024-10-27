@@ -72,9 +72,10 @@ def handle_publish(client_name, subject, msg, conn):
     
     # forward the message to all subscribers
     for subscriber in topics[subject]:
-        subscriber_conn = client_connections[subscriber]
-        if subscriber_conn is not None:
-            subscriber_conn.send(f"{subject} - {client_name}: {msg}\n".encode())
+        if subscriber != client_name:
+            subscriber_conn = client_connections[subscriber]
+            if subscriber_conn is not None:
+                subscriber_conn.send(f"NOTIFY: {subject} - {client_name}: {msg}\n".encode())
     conn.send(f"PUBLISH: Published to {subject}\n".encode())
     print(f"[PUBLISH] {client_name} published to {subject}: {msg}")
 
