@@ -121,6 +121,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(f"\n{YELLOW}[INFO]{RESET} Ctrl+C detected, disconnecting")
         try:
-            disconnect(client_socket)
+            disconnect()
+            client_socket.close()
         except:
             exit()
