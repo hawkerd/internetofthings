@@ -46,25 +46,31 @@ def handle_client(conn, addr):
         try:
             message = conn.recv(1024).decode()
             if message:
-                print(f"{CYAN}[RECEIVED]{RESET} {message} from {addr.}")
+                print(f"{CYAN}[RECEIVED]{RESET} {message} from {addr}")
 
                 # extract the type and details of the message
                 parts = message.split(',')
 
                 if not registered:
-                    if len(parts) == 2 and ((parts[1].strip() == "CONN") or (parts[1].strip() == "RECONNECT")):
+                    if len(parts) == 2 and parts[1].strip() == "CONN":
                         client_name = parts[0].strip()
-                        handle_connect(client_name, conn)
+                        if handle_connect(client_name, conn):
+                            # start thread for sending messages
+                            threading.Thread(target=send_messages_from_queue, args=(client_name,), daemon=True).start()
 
-                        # begin thread to handle notifying client
-                        threading.Thread(target=send_messages_from_queue, args=(client_name,), daemon=True).start()
+                            # mark connection as registered
+                            registered = True
+                    elif len(parts) == 2 and parts[1].strip() == "RECONNECT":
+                        client_name = parts[0].strip()
+                        if handle_reconnect(client_name, conn):
+                            # start thread for sending messages
+                            threading.Thread(target=send_messages_from_queue, args=(client_name,), daemon=True).start()
 
-                        # mark connection as registered
-                        registered = True
+                            # mark connection as registered
+                            registered = True
                     else:
                         conn.send(f"ERROR: Client Not Connected - Must Register First\n".encode())
                         print(f"{RED}[ERROR]{RESET} Client tried to operate without registering")
-                        return
                 else:
                     # Handle SUBSCRIBE
                     if len(parts) == 3 and parts[1].strip() == "SUB":
@@ -82,7 +88,6 @@ def handle_client(conn, addr):
                     else:
                         conn.send(f"ERROR: Invalid Request\n".encode())
                         print(f"{RED}[ERROR]{RESET} {client_name} made invalid request")
-                        return
             else:
                 connected = False
         except:
@@ -92,13 +97,6 @@ def handle_client(conn, addr):
 
 # handle message format <CLIENT_NAME, PUB, SUBJECT, MSG>
 def handle_publish(client_name, subject, msg, conn):
-
-    # make sure client is connected
-    if clients[client_name].connection is None:
-        conn.send(f"ERROR: Publish Failed - Client Not Connected\n".encode())
-        print(f"{RED}[ERROR]{RESET} {client_name} tried to subscribe before logging in")
-        return
-
     # make sure the subject exists
     if subject not in topics:
         conn.send(f"ERROR: Publish Failed - Subject {subject} Not Found\n".encode())
@@ -120,11 +118,6 @@ def handle_publish(client_name, subject, msg, conn):
 
 # handle message format <NAME, SUB, SUBJECT>
 def handle_sub(client_name, subject, conn):
-    if (client_name not in clients) or (clients[client_name].connection is None):
-        conn.send(f"ERROR: Subscribe Failed - Client Not Registered\n".encode())
-        print(f"{RED}[ERROR]{RESET} {client_name} tried to subscribe before logging in")
-        return
-
     # add the client to the subscriber list if it exists
     if subject in topics:
         if subject not in clients[client_name].subscriptions:
@@ -146,11 +139,9 @@ def handle_sub(client_name, subject, conn):
 def handle_connect(client_name, conn):
     # if client is already registered, reconnect
     if client_name in clients:
-        clients[client_name].connection = conn
-
-        print(f"{PURPLE}[RECONNECT]{RESET} {client_name} connected.")
-        conn.send("RECONNECT_ACK\n".encode())
-        return
+        print(f"{RED}[ERROR]{RESET} {client_name} already exists during CONNECT.")
+        conn.send("ERROR: Client name already registered. Use RECONNECT.\n".encode())
+        return False
     
     # create a new client
     client = Client()
@@ -162,6 +153,23 @@ def handle_connect(client_name, conn):
     # respond to the client
     print(f"{PURPLE}[CONNECT]{RESET} {client_name} connected.")
     conn.send("CONN_ACK\n".encode())
+
+    return True
+
+
+# handle message format <NAME, RECONNECT>
+def handle_reconnect(client_name, conn):
+    # if client is already registered, reconnect
+    if client_name in clients:
+        clients[client_name].connection = conn
+        print(f"{PURPLE}[RECONNECT]{RESET} {client_name} reconnected.")
+        conn.send("RECONNECT_ACK\n".encode())
+        return True
+    else:
+        print(f"{RED}[ERROR]{RESET} {client_name} not found during RECONNECT.")
+        conn.send("ERROR: Client not found. Use CONN to register.\n".encode())
+        return False
+
 
 # handle message format <DISC>
 def handle_disconnect(client_name, conn):

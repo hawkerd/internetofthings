@@ -44,7 +44,7 @@ def send_messages(client_socket):
                 break
         except:
             # error handling
-            print("{RED}[ERROR]{RESET} Connection closed or error in sending messages.")
+            print(f"{RED}[ERROR]{RESET} Connection closed or error in sending messages.")
             break
 
 def wait_for_response():
@@ -53,6 +53,11 @@ def wait_for_response():
         message = in_messages.get()
         if message:
             return message
+
+def reconnect():
+    # send reconnect command, print server output
+    out_messages.put(f"{client_name}, RECONNECT\n")
+    print(f"\n{PURPLE}[SERVER]{RESET} {wait_for_response()}")  
 
 def connect():
     # send connect command, print server output
@@ -91,13 +96,11 @@ if __name__ == "__main__":
         send_thread.daemon = True
         send_thread.start()
 
-        # send CONN command
-        connect()
 
         # loop to send commands
         while True:
-            choice = input(f"{CYAN}\nOptions: [1] Subscribe, [2] Publish, [3] Disconnect: {RESET}")
-            
+            choice = input(f"{CYAN}\nOptions: [1] Subscribe, [2] Publish, [3] Connect, [4] Reconnect, [5] Disconnect: {RESET}")
+
             if choice == "1" or choice.lower() == "subscribe":
                 subject = input(f"{CYAN}Enter subject to subscribe to (WEATHER, NEWS): {RESET}")
                 subscribe(subject)
@@ -105,7 +108,11 @@ if __name__ == "__main__":
                 subject = input(f"{CYAN}Enter subject to publish to: {RESET}")
                 message = input(f"{CYAN}Enter your message: {RESET}")
                 publish(subject, message)
-            elif choice == "3" or choice.lower() == "disconnect":
+            elif choice == "3" or choice.lower() == "connect":
+                connect()
+            elif choice == "4" or choice.lower() == "reconnect":
+                reconnect()
+            elif choice == "5" or choice.lower() == "disconnect":
                 disconnect()
                 client_socket.close()
                 break
