@@ -3,6 +3,13 @@ import threading
 import queue
 import time
 
+# ANSI color codes
+PURPLE = "\033[35m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+CYAN = "\033[36m"
+RESET = "\033[0m"
+
 # list of topics and updates
 topics: dict[str, list[str]] = {
     "WEATHER": [],
@@ -39,7 +46,7 @@ def handle_client(conn, addr):
         try:
             message = conn.recv(1024).decode()
             if message:
-                print(f"[RECEIVED] {message} from {addr}")
+                print(f"{CYAN}[RECEIVED]{RESET} {message} from {addr.}")
 
                 # extract the type and details of the message
                 parts = message.split(',')
@@ -56,7 +63,7 @@ def handle_client(conn, addr):
                         registered = True
                     else:
                         conn.send(f"ERROR: Client Not Connected - Must Register First\n".encode())
-                        print(f"[ERROR] Client tried to operate without registering")
+                        print(f"{RED}[ERROR]{RESET} Client tried to operate without registering")
                         return
                 else:
                     # Handle SUBSCRIBE
@@ -74,7 +81,7 @@ def handle_client(conn, addr):
 
                     else:
                         conn.send(f"ERROR: Invalid Request\n".encode())
-                        print(f"[ERROR] {client_name} made invalid request")
+                        print(f"{RED}[ERROR]{RESET} {client_name} made invalid request")
                         return
             else:
                 connected = False
@@ -89,13 +96,13 @@ def handle_publish(client_name, subject, msg, conn):
     # make sure client is connected
     if clients[client_name].connection is None:
         conn.send(f"ERROR: Publish Failed - Client Not Connected\n".encode())
-        print(f"[ERROR] {client_name} tried to subscribe before logging in")
+        print(f"{RED}[ERROR]{RESET} {client_name} tried to subscribe before logging in")
         return
 
     # make sure the subject exists
     if subject not in topics:
         conn.send(f"ERROR: Publish Failed - Subject {subject} Not Found\n".encode())
-        print(f"[ERROR] {client_name} tried to publish to non-existent subject: {subject}")
+        print(f"{RED}[ERROR]{RESET} {client_name} tried to publish to non-existent subject: {subject}")
         return
 
     # add the message to the history
@@ -105,17 +112,17 @@ def handle_publish(client_name, subject, msg, conn):
     for name, client in clients.items():
         if subject in client.subscriptions:
             client.messages_queue.put(f"NOTIFY: {subject} - {client_name}: {msg}\n".encode())
-            print(f"[ENQUEUE] Message enqueued for {name}")
+            print(f"{PURPLE}[ENQUEUE]{RESET} Message enqueued for {name}")
 
     # respond to the publishing client
     conn.send(f"PUBLISH: Published to {subject}\n".encode())
-    print(f"[PUBLISH] {client_name} published to {subject}: {msg}")
+    print(f"{PURPLE}[PUBLISH]{RESET} {client_name} published to {subject}: {msg}")
 
 # handle message format <NAME, SUB, SUBJECT>
 def handle_sub(client_name, subject, conn):
     if (client_name not in clients) or (clients[client_name].connection is None):
         conn.send(f"ERROR: Subscribe Failed - Client Not Registered\n".encode())
-        print(f"[ERROR] {client_name} tried to subscribe before logging in")
+        print(f"{RED}[ERROR]{RESET} {client_name} tried to subscribe before logging in")
         return
 
     # add the client to the subscriber list if it exists
@@ -128,12 +135,12 @@ def handle_sub(client_name, subject, conn):
                 clients[client_name].messages_queue.put(past_message.encode())
 
             conn.send(f"SUB_ACK: Subscribed to {subject}\n".encode())
-            print(f"[SUBSCRIPTION] {client_name} subscribed to {subject}")
+            print(f"{PURPLE}[SUBSCRIPTION]{RESET} {client_name} subscribed to {subject}")
         else:
             conn.send(f"SUB_ACK: Already subscribed to {subject}\n".encode())
     else:
         conn.send(f"ERROR: Subscription Failed - Subject {subject} Not Found\n".encode())
-        print(f"[ERROR] {client_name} tried to subscribe to non-existent subject: {subject}")
+        print(f"{RED}[ERROR]{RESET} {client_name} tried to subscribe to non-existent subject: {subject}")
             
 # handle message format <NAME, CONN>
 def handle_connect(client_name, conn):
@@ -141,7 +148,7 @@ def handle_connect(client_name, conn):
     if client_name in clients:
         clients[client_name].connection = conn
 
-        print(f"[RECONNECT] {client_name} connected.")
+        print(f"{PURPLE}[RECONNECT]{RESET} {client_name} connected.")
         conn.send("RECONNECT_ACK\n".encode())
         return
     
@@ -153,7 +160,7 @@ def handle_connect(client_name, conn):
     clients[client_name] = client
 
     # respond to the client
-    print(f"[CONNECT] {client_name} connected.")
+    print(f"{PURPLE}[CONNECT]{RESET} {client_name} connected.")
     conn.send("CONN_ACK\n".encode())
 
 # handle message format <DISC>
@@ -163,11 +170,11 @@ def handle_disconnect(client_name, conn):
 
     # wipe the connection from the dictionery
     if client_name == None:
-        print("[DISCONNECT] Client disconnected.")
+        print(f"{PURPLE}[DISCONNECT]{RESET} Client disconnected.")
     else:
         if client_name in clients:
             clients[client_name].connection = None
-        print(f"[DISCONNECT] {client_name} disconnected.")
+        print(f"{PURPLE}[DISCONNECT]{RESET} {client_name} disconnected.")
 
 
 
@@ -176,21 +183,20 @@ server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(("localhost", 5555))
 server.listen()
-print("[STARTING] Server is listening on localhost:5555")
+print(f"{CYAN}[STARTING]{RESET} Server is listening on localhost:5555")
 
 # repeatedly create new threads for new connections
 try:
     while True:
         # accept a new connection-
         conn, addr = server.accept()
-        print(f"[NEW CONNECTION] {addr} connected.")
+        print(f"{CYAN}[NEW CONNECTION]{RESET} {addr} connected. Active connections: {threading.active_count()}")
 
         # create a new thread to handle the client
         thread = threading.Thread(target=handle_client, args=(conn, addr))
         thread.start()
-        print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
 except KeyboardInterrupt:
-    print("\n[SHUTTING DOWN] Server is shutting down.")
+    print(f"\n{CYAN}[SHUTTING DOWN]{RESET} Server is shutting down.")
     server.close()
     quit()
     exit()
